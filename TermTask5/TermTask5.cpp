@@ -1,6 +1,7 @@
 ﻿#include <fstream>
 #include <iostream>
 #include <string>
+#include <assert.h>
 using namespace std;
 
 struct elem
@@ -52,11 +53,11 @@ void show_mat(Matr mat)
     int i = 0; int j = 0;
     mat = mat->next;
     cout << "------------" << endl;
-    for (i = 0; i < rows && mat != NULL; i++)
+    for (i = 0; i < rows; i++)
     {
-        for (j = 0; j < columns && mat != NULL; j++)
+        for (j = 0; j < columns; j++)
         {
-            if (mat->i == i && mat->j == j)
+            if (mat != NULL && mat->i == i && mat->j == j)
             {
                 cout << mat->data << ' ';
                 mat = mat->next;
@@ -66,23 +67,8 @@ void show_mat(Matr mat)
                 cout << 0 << ' ';
             }
         }
-        if(j == columns) cout << endl;
-    }
-
-    while (j < columns) //если в конце строки нули
-    {
-        cout << 0 << ' ';
-        j++;
-    }
-    cout << endl;
-    
-    while (i < rows) //если последние строки содержат одни нули
-    {
-        for (j = 0; j < columns; j++) cout << 0 << ' ';
         cout << endl;
-        i++;
     }
-
     cout << "------------" << endl;
 }
 
@@ -93,12 +79,13 @@ void print_mat(Matr mat, string filename)
     int rows = mat->i;
     int columns = mat->j;
     int i = 0; int j = 0;
+    out << rows << ' ' << columns << endl;
     mat = mat->next;
-    for (i = 0; i < rows && mat != NULL; i++)
+    for (i = 0; i < rows; i++)
     {
-        for (j = 0; j < columns && mat != NULL; j++)
+        for (j = 0; j < columns; j++)
         {
-            if (mat->i == i && mat->j == j)
+            if (mat != NULL && mat->i == i && mat->j == j)
             {
                 out << mat->data << ' ';
                 mat = mat->next;
@@ -108,52 +95,64 @@ void print_mat(Matr mat, string filename)
                 out << 0 << ' ';
             }
         }
-        if (j == columns) out << endl;
-    }
-
-    while (j < columns) //если в конце строки нули
-    {
-        out << 0 << ' ';
-        j++;
-    }
-    out << endl;
-
-    while (i < rows) //если последние строки содержат одни нули
-    {
-        for (j = 0; j < columns; j++) out << 0 << ' ';
         out << endl;
-        i++;
     }
-
-    out.close();
 }
 
 Matr min_in_row(Matr mat, int row)
 {
     if (row >= mat->i) cout << "Wrong row" << endl;
     Matr p = mat->next;
-    for (int i = 0; i < row && p != NULL; i++) //пропускаю первые row-1 строк
-    {
-        for (int j = 0; j < mat->j && p !=NULL; j++)
-        {
-            if (p->i == i && p->j == j) p = p->next;
-        }
-    }
 
     Matr min = new elem;
     min->data = 0;
     min->i = row;
     min->j = 0;
-    int j = 0;
-    for (j = 0; j < mat->j && p!=NULL && p->i == row; j++)
+
+    int count_i = 0;
+
+    while (p != NULL && p->i != row) p = p->next; //пропускаем все строки перед row
+
+    if (p == NULL) return min; //если в строке одни нули
+
+    min->data = p->data; //предполагаем, что первый ненулевой элемент строки минимальный
+    min->j = p->j;
+    while (p != NULL && p->i == row)
     {
-        if (p->data < min->data) min = p;
-        if (p->j == j)
+        if (p->data < min->data)
         {
+            min->j = p->j;
+            min->data = p->data;
+        }
+        count_i++;
+        p = p->next;
+    }
+
+    if (count_i < mat->j && min->data > 0) //если в строке есть хотя бы 1 ноль, и он минимальный
+    {
+        int j = 0;
+        min->data = 0;
+        min->j = -1;
+
+        p = mat->next;
+        while (p != NULL && min->j == -1) //поиск столбца, в котором ноль - минимальный элемент
+        {
+            if (p->i == row && p->j != j)
+            {
+                min->j = j;
+            }
+            if (p->i == row && p->j == j)
+            {
+                j++;
+            }
             p = p->next;
         }
+        if (p == NULL && min->j == -1)
+        {
+            min->j = j;
+        }
     }
-    if (j != row && min->data == 0) min->j = j;
+
     return min;
 }
 
@@ -197,7 +196,7 @@ Matr max_in_column(Matr mat, int column)
         max_elem->data = 0;
         max_elem->i = -1;
         p = mat->next;
-        while (p != NULL && max_elem->i == -1) //поиск строки, в которой ноль как максимальный элемент
+        while (p != NULL && max_elem->i == -1) //поиск строки, в которой ноль - максимальный элемент
         {
             if (p->j == column && p->i != i)
             {
@@ -213,12 +212,93 @@ Matr max_in_column(Matr mat, int column)
     return max_elem;
 }
 
+void delete_mat(Matr& mat)
+{
+    Matr p;
+    while (mat != NULL)
+    {
+        p = mat;
+        mat = mat->next;
+        delete p;
+    }
+}
+
+void replace_elem_after_min(Matr mat) //
+{
+    Matr min;
+    Matr p;
+    Matr q;
+    
+    for (int k = 0; k < mat->i; k++)
+    {
+        min = min_in_row(mat, k);
+        if (min->j == mat->j-1) continue; 
+        p = mat->next;
+        for (int i = 0; i < min->i; i++) //пропускаю строки до минимального элемента (или последнего)
+        {
+            for (int j = 0; j < mat->j; j++)
+            {
+                if (p->i == i && p->j == j) p = p->next;
+            }
+        }
+        for (int j = 0; j < min->j; j++) //перехожу к минимальному элементу или первому существующему до него
+        {
+            if (p->i == min->i && p->j == j && p->next != NULL && p->next->i == min->i) p = p->next;
+        }
+
+        if (min->data == 0 && min->j == 0) //маргинальный случай
+        {
+            q = mat;
+            while (q->next != p) q = q->next;
+            p = q;
+        }
+
+        cout << "min: " << min->data << ' ' << min->i << ' ' << min->j << endl;
+        cout << "p: " << p->data << ' ' << p->i << ' ' << p->j << endl;
+
+        if (p->next != NULL && p->next->i == min->i && p->next->j == min->j + 1) //следующий после минимального элемент ненулевой
+        {
+            p = p->next;
+            p->data = p->j;
+        }
+        else //следующий элемент нулевой
+        {
+            q = p->next;
+            p->next = new elem;
+            p = p->next;
+            p->data = min->j + 1;
+            p->i = min->i;
+            p->j = min->j + 1;
+            p->next = q;
+        }
+
+        //show_mat(mat);
+    }
+}
+
+void min_in_row_max_in_column(Matr mat) //минимальный в строке и максимальный в столбце элемент
+{
+    Matr min_ir; //минимальный в строке
+    Matr max_ic; //максимальный в столбце
+    Matr p = mat->next;
+    while (p != NULL)
+    {
+        min_ir = min_in_row(mat, p->i);
+        max_ic = max_in_column(mat, p->j);
+        if (p->data == min_ir->data && p->data == max_ic->data) //минимальность в строке и максимальность в столбце
+        {
+            cout << "row=" << p->i << ' ' << "elem=" << ' ' << p->data << endl;
+        }
+        p = p->next;
+    }
+}
+
 int main()
 {
     Matr mat = create_mat("matrix.txt");
     show_mat(mat);
 
-    //Matr min = min_in_row(mat, 3);
+    //Matr min = min_in_row(mat, 2);
     //cout << "Min=" << min->data << " " << "i=" << min->i << " " << "j=" << min->j << endl;
 
     //Matr max = max_in_column(mat, 3);
@@ -226,5 +306,9 @@ int main()
 
     //print_mat(mat, "printed_matrix.txt");
 
+    //min_in_row_max_in_column(mat);
+
+    replace_elem_after_min(mat);
+    show_mat(mat);
 }
 
